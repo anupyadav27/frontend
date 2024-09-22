@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo4j Aura Graph Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #banner {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px;
+            text-align: center;
+        }
+
+        #controls {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            text-align: center;
+        }
+
+        #graph-frame {
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #ccc;
+            position: relative;
+            width: 100%;
+            height: 70vh;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        #text-info {
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        text {
+            font-size: 12px;
+            fill: black;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="banner">
+        <h1>Neo4j Aura Graph Visualization</h1>
+    </div>
+
+    <div id="controls">
+        <label>Node Size: <input type="range" id="nodeSize" min="5" max="20" value="10"></label>
+        <label>Link Strength: <input type="range" id="linkStrength" min="-200" max="200" value="-100"></label>
+    </div>
+
+    <div id="graph-frame">
+        <svg id="graph"></svg>
+    </div>
+
+    <div id="text-info">Adjustable Node Sizes and Link Strengths</div>
+
+    <script>
+        const width = document.getElementById('graph-frame').clientWidth;
+        const height = document.getElementById('graph-frame').clientHeight;
+
+        const svg = d3.select("#graph")
+            .attr("width", width)
+            .attr("height", height)
+            .call(d3.zoom().on("zoom", (event) => svg.attr("transform", event.transform)))
+            .append("g");
+
+        let nodeSize = 10;  // Starting node size
+        let linkStrength = -100;  // Starting link strength
+        let graphData;  // Store graph data globally
+
+        const simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id).distance(100))
+            .force("charge", d3.forceManyBody().strength(() => linkStrength))
+            .force("center", d3.forceCenter(width / 2, height / 2));
+
+        fetch('/api/graph-data')
+            .then(response => response.json())
+            .then(data => {
+                graphData = data;  // Store graph data for later access
+                updateVisualization(graphData);
+            })
+            .catch(error => console.error('Error fetching graph data:', error));
+
+        function updateVisualization(graphData) {
+            svg.selectAll("*").remove();
+
+            const link = svg.append("g")
+                .selectAll("line")
+                .data(graphData.links)
+                .enter().append("line")
+                .attr("stroke", "#999")
+                .attr("stroke-opacity", 0.6)
+                .attr("stroke-width", 1);
+
+            // First, add circle elements for nodes
+            const node = svg.append("g")
+                .selectAll("g")
+                .data(graphData.nodes)
+                .enter()
+                .append("g");
+
+            // Append circles for nodes and fill with sky blue color
+            node.append("circle")
+                .attr("r", nodeSize)
+                .attr("fill", "skyblue");  // Fill the circle with sky blue color
+
+            // Append images inside the circles
+            node.append("image")
+                .attr("xlink:href", "pic/lb.png")  // Load the image named 'lb.png' from the 'pic' folder
+                .attr("width", nodeSize * 1.8)  // Image width slightly smaller than the circle
+                .attr("height", nodeSize * 1.8) // Image height slightly smaller than the circle
+                .attr("x", -nodeSize * 0.9) // Center the image
+                .attr("y", -nodeSize * 0.9) // Center the image
+                .attr("clip-path", "circle");  // Ensure the image fits inside the circle
+
+            // Add text labels below the circles
+            const label = node.append("text")
+                .text(d => d.label)
+                .attr('x', 0)
+                .attr('y', nodeSize + 12)  // Text appears below the node
+                .attr('text-anchor', 'middle');  // Center the label horizontally
+
+            simulation.nodes(graphData.nodes)
+                .on("tick", ticked);
+
+            simulation.force("link")
+                .links(graphData.links);
+
+            simulation.alpha(1).restart();
+
+            function ticked() {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("transform", d => `translate(${d.x},${d.y})`);  // Move the group (circle + image + text)
+            }
+        }
+
+        function drag(simulation) {
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+
+            return d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended);
+        }
+
+        // Add interactivity for node size and link strength
+        document.getElementById("nodeSize").addEventListener("input", (e) => {
+            nodeSize = +e.target.value;
+            updateVisualization(graphData);
+        });
+
+        document.getElementById("linkStrength").addEventListener("input", (e) => {
+            linkStrength = +e.target.value;
+            simulation.force("charge", d3.forceManyBody().strength(linkStrength));
+            simulation.alpha(1).restart();
+        });
+
+    </script>
+</body>
+</html>
