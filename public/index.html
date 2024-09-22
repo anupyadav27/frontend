@@ -116,7 +116,8 @@
                 .selectAll("g")
                 .data(graphData.nodes)
                 .enter()
-                .append("g");
+                .append("g")
+                .call(drag(simulation));  // Apply drag behavior to individual nodes
 
             // Append circles for nodes and fill with sky blue color
             node.append("circle")
@@ -160,21 +161,21 @@
         }
 
         function drag(simulation) {
-            function dragstarted(event) {
+            function dragstarted(event, d) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
+                d.fx = d.x;
+                d.fy = d.y;
             }
 
-            function dragged(event) {
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
             }
 
-            function dragended(event) {
+            function dragended(event, d) {
                 if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
+                d.fx = null;
+                d.fy = null;
             }
 
             return d3.drag()
@@ -186,7 +187,7 @@
         // Add interactivity for node size and link strength
         document.getElementById("nodeSize").addEventListener("input", (e) => {
             nodeSize = +e.target.value;
-            updateVisualization(graphData);
+            updateVisualization(graphData);  // Re-render with updated node size
         });
 
         document.getElementById("linkStrength").addEventListener("input", (e) => {
